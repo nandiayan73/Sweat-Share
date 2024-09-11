@@ -1,30 +1,88 @@
 const User=require("../models/user.model");
 const Post=require("../models/post.model");
+const nodemailer = require('nodemailer');
 const generateToken=require("../config/generateToken");
+const dotenv = require('dotenv');
+
+dotenv.config(); 
+
+
+// Configure Nodemailer Transporter
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
+
+
+//Registering the user:
 const registerUser=async(req,res)=>{
 
-
     const {name,email,password,dp}=req.body;
-
+    console.log(req.body);
     // checking the response is correct or not
     if(!name|| !email || !password){
         res.status(400);
         throw new Error("Please enter all the fields");
     }
+    // Adding the picture
+    const now = new Date();
+    const day = now.getDate(); // Day of the month
+    const month = now.getMonth() + 1; // Month (1-12)
+    const year = now.getFullYear();
+    const hours = now.getHours(); // Hours (0-23)
+    const minutes = now.getMinutes(); // Minutes (0-59)
+    const seconds = now.getSeconds(); // Seconds (0-59)
+    const formattedDate = `${day}/${month}/${year}`;
+    const formattedTime = `${hours}:${minutes}:${seconds}`;
+
+    var pic=dp.picture;
+    if(!pic)
+    {
+        pic="https://www.shutterstock.com/image-vector/vector-flat-illustration-grayscale-avatar-600nw-2264922221.jpg";
+    }
+    const dpicture=await Post.create({
+        picture:pic,
+        caption:dp.caption,
+        date:formattedDate
+    });
     const userExists=await User.findOne({email});
-    if(userExists){
+    if(userExists && userExists.isVerified){
         res.status(400);
         throw new Error("User already exists");
     }
-    console.log(dp)
-    const user =await User.create({
-        name:name,
+
+    //Creating user:
+    const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit OTP
+    const otpExpires = new Date(Date.now() + 5 * 60 * 1000); // OTP expires in 5 minutes
+    // sending the otp  
+    const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: email,
+        subject: 'Please enter the otp in the webapp',
+        text: `Your OTP code is ${otp}. It is valid for 5 minutes.`,
+    };
+
+    transporter.sendMail(mailOptions, (error, info) => {
+        if (error) {
+        console.log(error);
+        return res.status(500).json({ message: 'Failed to send OTP email' });
+        }
+        res.status(200).json({ message: 'OTP sent to your email' });
+    });
+    // Registering the user:
+    const user = await User.create({
+        name,
         email,
         password,
-        dp
+        dp:dpicture._id,
+        otp,
+        otpExpires
     })
     if(user){
-        console.log("User created!");
+        console.log("Otp sent!");
         res.status(201).json({
             _id:user._id,
             name:user.name,
@@ -37,12 +95,57 @@ const registerUser=async(req,res)=>{
         throw new Error("failed to create user!");
     }
 }
+
+const matchOtp=async(req,res)=>
+{
+  const { email, otp ,_id} = req.body;
+  const user = await User.findOne({ email ,_id});
+  console.log(user);
+
+  if (!user) {
+    return res.status(400).json({ message: 'User not found' });
+  }
+
+  if (user.otp === otp && user.otpExpires > Date.now()) {
+    user.isVerified = true;
+    user.otp = undefined;
+    user.otpExpires = undefined;
+    await user.save();
+    // Sending the register message:
+    const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: email,
+        subject: 'Your account has been successfully created on Sweat Share. ',
+        text: `Sweat today Shine tommorow!`,
+    };
+
+    transporter.sendMail(mailOptions, (error, info) => {
+        if (error) {
+        console.log(error);
+        return res.status(500).json({ message: 'Failed to resgiter user' });
+        }
+        res.status(200).json({ message: 'User registered successfully' });
+    });
+
+    // delete all the unregistered users with the registered email address.
+    const delUnreg=await User.deleteMany({email,isVerified:false});
+
+    // sending message to frontend
+    res.status(200).json({ message: 'Account registered successfully' });
+
+  } else {
+    res.status(400).json({ message: 'Error registering the user' });
+  }
+}
+
+
+// User login:
 const authUser=async(req,res)=>{
 
     const {email,password}=req.body;
     const user=await User.findOne({email});
     
-    if(user && await user.matchPassword(password)){
+    if(user && await user.matchPassword(password) && user.isVerified){
         const token=generateToken(user._id);
         
         const logged_user= await User.findOneAndUpdate({email:email},{token:token});
@@ -68,22 +171,18 @@ const authUser=async(req,res)=>{
     }
 }
 const updateUser=async(req,res)=>{
-    console.log("this is from update character!")
-    const {email,password,cover_photo,dp,name,postPic}=req.body.data;
-    
-    console.log("ehhehe"+postPic.pic)
-    if(postPic.pic){
-        console.log(postPic);
-        console.log(" Creating a new post");
-      
-        const new_post={
-            pic:postPic.pic,
-        }
-        const updated_char=await User.findOneAndUpdate({email:email},{cover_photo:cover_photo,dp:dp,name:name,password:password,$push: {posts:new_post}});
+    const {email,password,dp,name}=req.body;
+    try
+    {
+        const updated_char=await User.findOneAndUpdate({email:email},{dp,name,password});
+        res.status(201);
+        res.send(updated_char);
     }
-    const updated_char=await User.findOneAndUpdate({email:email},{cover_photo:cover_photo,dp:dp,name:name,password:password});
-    res.status(201);
-    res.send(updated_char);
+    catch(e)
+    {
+        res.status(400);
+        throw new Error(e);
+    }
 }
 
 
@@ -274,4 +373,52 @@ const unFollow=async (req,res)=>{
     }
 }
 
-module.exports={registerUser,authUser,addPosts,addComment,follow,unFollow,allUsers,addReplies};
+const deleteUser = async (req, res) => {
+    const { email } = req.body;
+    try {
+      // Check if the user exists
+      const user = await User.findOne({ email });
+      if (!user) {
+        return res.status(404).json({ message: "User account not available!" });
+      }
+  
+      // Delete the user
+      const deleteResult = await User.deleteOne({ email });
+  
+      // Check if the deletion was successful
+      if (deleteResult.deletedCount === 1) {
+        res.status(200).json({ message: "User account deleted successfully." });
+      } else {
+        res.status(500).json({ message: "Failed to delete the user account." });
+      }
+    } catch (error) {
+      // Handle unexpected errors
+      res.status(500).json({ message: "An error occurred.", error: error.message });
+    }
+  };
+  const updatePassword=(req,res)=>{
+    const {newPassword,email}=req.body;
+    try
+    {
+        const updatedUser = User.findOneAndUpdate({email},{password:newPassword});
+        if(updatedUser)
+        {
+            res.status(201);
+            res.send("Updated user with email: "+email);
+        }
+        else
+        {
+            res.status(400);
+            throw new Error("Can't update user!");
+        }
+    }
+    catch(e)
+    {
+        console.log(e);
+        res.status(400);
+        throw new Error(e);
+    }
+  }
+
+  
+module.exports={registerUser,authUser,addPosts,addComment,follow,unFollow,allUsers,addReplies,matchOtp,deleteUser,updateUser};

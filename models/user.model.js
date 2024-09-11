@@ -5,12 +5,27 @@ const userSchema=mongoose.Schema({
     name:{type:String,required:true},
     email:{type:String,required:true},
     password:{type:String,required:true},
+    otp:{type:String},
+    otpExpires: {type:Date},
+    isVerified: { type: Boolean, default: false },
     followersCount:{type:Number,default:0},
     followingCount:{type:Number,default:0},
     followers:[{id:{type:String}}],
     following:[{id:{type:String}}],
-    dp:{type:String,default:"https://png.pngtree.com/png-vector/20191110/ourmid/pngtree-avatar-icon-profile-icon-member-login-vector-isolated-png-image_1978396.jpg"},
-    cover_photo:{type:String,default:""},
+    dp:{
+        type: mongoose.Schema.Types.ObjectId, ref: Post 
+        // picture:{type:String,default:"https://png.pngtree.com/png-vector/20191110/ourmid/pngtree-avatar-icon-profile-icon-member-login-vector-isolated-png-image_1978396.jpg"},
+        // caption:{type:String},
+        // comments:{
+        //     comment:[{
+        //         userId:{type:String},
+        //         message:{type:String},
+        //         replies:{type:String},
+        //         likes:{type:Number,default:0}
+        //     }],
+        //     shared:{type:Number,default:0}
+        // }
+    },
     token:{type:String,default:""},
     gym:[{type:String}],
     posts: [{ type: mongoose.Schema.Types.ObjectId, ref: Post }],
