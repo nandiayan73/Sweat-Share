@@ -7,57 +7,61 @@ const dotenv = require('dotenv');
 dotenv.config(); 
 
 
+
+
 // Configure Nodemailer Transporter
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
+        user: process.env.EMAIL_USER, // Your Gmail address
+        pass: process.env.EMAIL_PASS, // Your Gmail password or App Password
     },
-  });
+    tls: {
+        rejectUnauthorized: false // Bypass self-signed certificate issue
+    }
+});
+
 
 
 //Registering the user:
 const registerUser=async(req,res)=>{
 
-    const {name,email,password,dp}=req.body;
+    const {name,email,password,username}=req.body;
     console.log(req.body);
     // checking the response is correct or not
-    if(!name|| !email || !password){
+    if(!name|| !email || !password ){
         res.status(400);
         throw new Error("Please enter all the fields");
     }
     // Adding the picture
-    const now = new Date();
-    const day = now.getDate(); // Day of the month
-    const month = now.getMonth() + 1; // Month (1-12)
-    const year = now.getFullYear();
-    const hours = now.getHours(); // Hours (0-23)
-    const minutes = now.getMinutes(); // Minutes (0-59)
-    const seconds = now.getSeconds(); // Seconds (0-59)
-    const formattedDate = `${day}/${month}/${year}`;
-    const formattedTime = `${hours}:${minutes}:${seconds}`;
+    // const now = new Date();
+    // const day = now.getDate(); // Day of the month
+    // const month = now.getMonth() + 1; // Month (1-12)
+    // const year = now.getFullYear();
+    // const hours = now.getHours(); // Hours (0-23)
+    // const minutes = now.getMinutes(); // Minutes (0-59)
+    // const seconds = now.getSeconds(); // Seconds (0-59)
+    // const formattedDate = `${day}/${month}/${year}`;
+    // const formattedTime = `${hours}:${minutes}:${seconds}`;
 
-    var pic=dp.picture;
-    if(!pic)
-    {
-        pic="https://www.shutterstock.com/image-vector/vector-flat-illustration-grayscale-avatar-600nw-2264922221.jpg";
-    }
+    
+    
+    photos="https://www.shutterstock.com/image-vector/vector-flat-illustration-grayscale-avatar-600nw-2264922221.jpg";
     const dpicture=await Post.create({
-        picture:pic,
-        caption:dp.caption,
-        date:formattedDate
+        photos,
     });
+    // check the email
     const userExists=await User.findOne({email});
     if(userExists && userExists.isVerified){
         res.status(400);
         throw new Error("User already exists");
     }
-
+    
     //Creating user:
+
+    // sending the otp  
     const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit OTP
     const otpExpires = new Date(Date.now() + 5 * 60 * 1000); // OTP expires in 5 minutes
-    // sending the otp  
     const mailOptions = {
         from: process.env.EMAIL_USER,
         to: email,
@@ -65,19 +69,20 @@ const registerUser=async(req,res)=>{
         text: `Your OTP code is ${otp}. It is valid for 5 minutes.`,
     };
 
-    transporter.sendMail(mailOptions, (error, info) => {
+    const sendmail= await transporter.sendMail(mailOptions, (error, info) => {
         if (error) {
         console.log(error);
         return res.status(500).json({ message: 'Failed to send OTP email' });
         }
         res.status(200).json({ message: 'OTP sent to your email' });
     });
+
     // Registering the user:
     const user = await User.create({
         name,
         email,
         password,
-        dp:dpicture._id,
+        dp:dpicture._id,//has the post id which is a display picture
         otp,
         otpExpires
     })
@@ -90,7 +95,8 @@ const registerUser=async(req,res)=>{
             pic:user.pic,
         })
     }
-    else{
+    else
+    {
         res.status(400);
         throw new Error("failed to create user!");
     }
@@ -98,42 +104,51 @@ const registerUser=async(req,res)=>{
 
 const matchOtp=async(req,res)=>
 {
+  console.log("Matching otp");
   const { email, otp ,_id} = req.body;
   const user = await User.findOne({ email ,_id});
-  console.log(user);
 
+  console.log(req.body);
   if (!user) {
     return res.status(400).json({ message: 'User not found' });
   }
-
-  if (user.otp === otp && user.otpExpires > Date.now()) {
-    user.isVerified = true;
-    user.otp = undefined;
-    user.otpExpires = undefined;
-    await user.save();
-    // Sending the register message:
-    const mailOptions = {
-        from: process.env.EMAIL_USER,
-        to: email,
-        subject: 'Your account has been successfully created on Sweat Share. ',
-        text: `Sweat today Shine tommorow!`,
-    };
-
-    transporter.sendMail(mailOptions, (error, info) => {
-        if (error) {
-        console.log(error);
-        return res.status(500).json({ message: 'Failed to resgiter user' });
-        }
-        res.status(200).json({ message: 'User registered successfully' });
-    });
-
-    // delete all the unregistered users with the registered email address.
-    const delUnreg=await User.deleteMany({email,isVerified:false});
-
-    // sending message to frontend
-    res.status(200).json({ message: 'Account registered successfully' });
-
-  } else {
+  try
+  {
+      if (user.otp === otp && user.otpExpires > Date.now()) 
+        {
+        user.isVerified = true;
+        user.otp = undefined;
+        user.otpExpires = undefined;
+        await user.save();
+        // Sending the register message:
+        const mailOptions = {
+            from: process.env.EMAIL_USER,
+            to: email,
+            subject: 'Your account has been successfully created on Sweat Share. ',
+            text: `Sweat today Shine tommorow!`,
+        };
+    
+        transporter.sendMail(mailOptions, (error, info) => {
+            if (error) {
+            console.log(error);
+            return res.status(500).json({ message: 'Failed to resgister user' });
+            }
+            res.status(200).json({ message: 'User registered successfully' });
+        });
+    
+        // delete all the unregistered users with the registered email address.
+        const delUnreg=await User.deleteMany({email,isVerified:false});
+    
+        // sending message to frontend
+        res.status(201).json({ message: 'Account registered successfully' });
+    
+      } else {
+        res.status(400).json({ message: 'Error registering the user' });
+      }
+  }
+  catch(e)
+  {
+    console.log(e);
     res.status(400).json({ message: 'Error registering the user' });
   }
 }

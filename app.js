@@ -9,19 +9,32 @@ const db=require("./db");
 const userRoutes=require("./routes/user.routes");
 require('dotenv').config();
 
+// Setting the database:
+db();
+
+
+
+
+
+
+app.use(express.json());
+app.use(cookieParser());
+app.use(bodyParser.urlencoded({extended: true}));
+
+// for request from frontend
+app.use(cors({
+    origin: 'http://localhost:5173',
+    credentials: true
+  }));
+
+// app.use(bodyParser.urlencoded({extended: true}));
+
 
 // Express routing:
 app.use("/api/user",userRoutes)
 
-// Setting the database:
-db();
 
-// using the parsers:
-app.use(cookieParser());
-app.use(bodyParser.urlencoded({extended: true}));
-
-
-
+// postman test:
 app.post("/postman",(req,res)=>{
     const data=req.body;
     res.send(data);
