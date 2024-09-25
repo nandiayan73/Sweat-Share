@@ -249,7 +249,7 @@ const addPosts=async(req,res)=>{
         {
             console.log("post created")
         }
-        const user=await User.findByIdAndUpdate(userId, { $push: { posts: post._id } });
+        const user= await User.findByIdAndUpdate(userId, { $push: { posts: post._id } });
         if(user)
         {
             res.send("Post added");
@@ -434,6 +434,36 @@ const deleteUser = async (req, res) => {
         throw new Error(e);
     }
   }
+
+  const logged_user=async(req,res)=>{
+        const {token}=req.body;
+        if(!token)
+        {
+            res.status(400);
+            throw new Error("No user found");
+        }
+        try
+        {
+            const verifyToken=jwt.verify(token,"johncena");
+            const rootUser=await User.findOne({_id:verifyToken.id});
+            if(rootUser)
+            {
+                res.status(200);
+                res.send("User Logged in!");
+                
+            }
+            else{
+                res.status(400);
+                throw new Error("Not Authorized");
+            }
+        }
+        catch(e)
+        {
+            res.status(400);
+            res.send("Server error!");
+        }
+  }
+
 
   
 module.exports={registerUser,authUser,addPosts,addComment,follow,unFollow,allUsers,addReplies,matchOtp,deleteUser,updateUser};
